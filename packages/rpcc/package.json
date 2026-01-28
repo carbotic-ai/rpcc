@@ -1,0 +1,22 @@
+{
+  "name": "rpcc",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./vitest": "./dist/vitest/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "postinstall": "node scripts/postinstall.js"
+  },
+  "dependencies": {
+    "pg": "^8.11.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}
