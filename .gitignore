@@ -8,3 +8,6 @@
 .vscode/
 .idea/
 .direnv/
+packages/rpcc/dist/
+**/*.tsbuildinfo
+coverage/
