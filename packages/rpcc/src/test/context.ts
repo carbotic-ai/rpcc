@@ -57,7 +57,7 @@ export function createRpcTest(opts?: { connectionString?: string }) {
     fnName: string,
     args: Record<string, unknown> = {},
     client?: PoolClient
-  ) {
+  ): Promise<T[]> {
     if (!client) {
       return withTestTransaction((tx) => rpc<T>(fnName, args, tx))
     }
@@ -68,12 +68,17 @@ export function createRpcTest(opts?: { connectionString?: string }) {
     const sql = `SELECT * FROM ${fnName}(${placeholders})`
     const values = keys.map((key) => args[key])
     const { rows } = await client.query(sql, values)
-    return rows as T
+    return rows as T[]
   }
 
-  async function seed(table: string, rows: Record<string, unknown>[], client?: PoolClient) {
+  async function seed(
+    table: string,
+    rows: Record<string, unknown>[],
+    client?: PoolClient
+  ): Promise<void> {
     if (!client) {
-      return withTestTransaction((tx) => seed(table, rows, tx))
+      await withTestTransaction((tx) => seed(table, rows, tx))
+      return
     }
     await assertInTransaction(client)
     if (!rows.length) return

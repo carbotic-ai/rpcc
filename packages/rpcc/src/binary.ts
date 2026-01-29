@@ -1,5 +1,6 @@
-import path from 'node:path'
 import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 function platformKey(): string {
   const platform = process.platform
@@ -21,7 +22,9 @@ export function resolveRpccBin(): string {
     return process.env.RPCC_BIN
   }
 
-  const binDir = path.resolve(__dirname, '..', 'bin')
+  const filename = fileURLToPath(import.meta.url)
+  const dirname = path.dirname(filename)
+  const binDir = path.resolve(dirname, '..', 'bin')
   const binName = `rpcc-${platformKey()}${process.platform === 'win32' ? '.exe' : ''}`
   const packaged = path.join(binDir, binName)
   if (fs.existsSync(packaged)) {
