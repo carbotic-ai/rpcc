@@ -67,6 +67,10 @@ Useful flags:
 The `packages/rpcc` package provides a Vitest plugin plus helpers to run RPC tests inside a
 transaction with coverage enabled.
 
+If you install from npm, a matching `rpcc-core` binary is downloaded automatically.
+You can override the download URL with `RPCC_RELEASE_BASE` or provide your own binary via
+`RPCC_BIN`.
+
 Install dependencies in the repo root, then in your test suite:
 
 ```ts
@@ -117,6 +121,7 @@ You can place `rpcc.config.json` in the project root:
 
 - `DATABASE_URL` — connection string for both CLI and JS helpers.
 - `RPCC_BIN` — optional path to a specific `rpcc-core` binary.
+- `RPCC_RELEASE_BASE` — optional base URL for binary downloads.
 - `RPCC_RUN_ID` — optional override for the current run id.
 
 ## Output artifacts
