@@ -35,11 +35,22 @@ if (fs.existsSync(dest)) {
   process.exit(0)
 }
 
+if (process.env.RPCC_SKIP_DOWNLOAD === '1') {
+  console.log('rpcc: skipping binary download (RPCC_SKIP_DOWNLOAD=1)')
+  process.exit(0)
+}
+
 const packageJsonPath = path.join(packageRoot, 'package.json')
 const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
 const version = pkg.version || '0.0.0'
 
 const repoRoot = path.resolve(packageRoot, '..', '..', '..')
+const repoCargo = path.join(repoRoot, 'Cargo.toml')
+const repoSql = path.join(repoRoot, 'sql', 'schema.sql')
+if (fs.existsSync(repoCargo) && fs.existsSync(repoSql)) {
+  console.log('rpcc: detected repo workspace; skipping binary download')
+  process.exit(0)
+}
 const candidates = [
   path.join(repoRoot, 'target', 'release', 'rpcc-core'),
   path.join(repoRoot, 'target', 'debug', 'rpcc-core')
