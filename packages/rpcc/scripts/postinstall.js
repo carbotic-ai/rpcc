@@ -44,7 +44,7 @@ const packageJsonPath = path.join(packageRoot, 'package.json')
 const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
 const version = pkg.version || '0.0.0'
 
-const repoRoot = path.resolve(packageRoot, '..', '..', '..')
+const repoRoot = path.resolve(packageRoot, '..', '..')
 const repoCargo = path.join(repoRoot, 'Cargo.toml')
 const repoSql = path.join(repoRoot, 'sql', 'schema.sql')
 if (fs.existsSync(repoCargo) && fs.existsSync(repoSql)) {
