@@ -1,4 +1,4 @@
-import { runRestore } from './setup'
+import { runRestore } from './setup.js'
 
 export default async function globalTeardown() {
   runRestore()

@@ -1,5 +1,5 @@
 import { Pool, type PoolClient } from 'pg'
-import { getRunId } from '../vitest/setup'
+import { getRunId } from '../vitest/setup.js'
 
 function validateIdentifier(name: string, label: string) {
   if (!/^[a-zA-Z0-9_.]+$/.test(name)) {

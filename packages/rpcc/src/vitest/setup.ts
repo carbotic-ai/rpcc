@@ -1,8 +1,8 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { resolveRpccBin } from '../binary'
-import { loadConfig } from '../config'
+import { resolveRpccBin } from '../binary.js'
+import { loadConfig } from '../config.js'
 
 let currentRunId: string | null = null
 

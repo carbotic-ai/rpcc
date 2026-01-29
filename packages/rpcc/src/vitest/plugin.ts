@@ -1,6 +1,6 @@
 import type { Plugin } from 'vite'
-import { loadConfig } from '../config'
-import { runInstrument, runRestore } from './setup'
+import { loadConfig } from '../config.js'
+import { runInstrument, runRestore } from './setup.js'
 
 export function rpccPlugin(opts?: { connectionString?: string; include?: string[]; exclude?: string[] }): Plugin {
   return {

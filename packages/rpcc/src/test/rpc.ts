@@ -1,1 +1,1 @@
-export { createRpcTest } from './context'
+export { createRpcTest } from './context.js'
