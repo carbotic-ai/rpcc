@@ -1,7 +1,6 @@
 {
-  "name": "rpcc",
-  "version": "0.0.0",
-  "private": true,
+  "name": "@carbotic-ai/rpcc",
+  "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,7 +10,17 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build",
     "postinstall": "node scripts/postinstall.js"
+  },
+  "files": [
+    "dist",
+    "scripts",
+    "bin",
+    "sql"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "dependencies": {
     "pg": "^8.11.5"

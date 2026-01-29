@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
+import https from 'node:https'
 import { fileURLToPath } from 'node:url'
 
 function platformKey() {
@@ -23,7 +24,8 @@ function ensureDir(dir) {
 }
 
 const scriptPath = fileURLToPath(import.meta.url)
-const binDir = path.resolve(path.dirname(scriptPath), '..', 'bin')
+const packageRoot = path.resolve(path.dirname(scriptPath), '..')
+const binDir = path.join(packageRoot, 'bin')
 ensureDir(binDir)
 
 const binName = `rpcc-${platformKey()}${process.platform === 'win32' ? '.exe' : ''}`
@@ -33,20 +35,73 @@ if (fs.existsSync(dest)) {
   process.exit(0)
 }
 
-const repoRoot = path.resolve(binDir, '..', '..', '..')
+const packageJsonPath = path.join(packageRoot, 'package.json')
+const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
+const version = pkg.version || '0.0.0'
+
+const repoRoot = path.resolve(packageRoot, '..', '..', '..')
 const candidates = [
   path.join(repoRoot, 'target', 'release', 'rpcc-core'),
   path.join(repoRoot, 'target', 'debug', 'rpcc-core')
 ]
 
 const source = candidates.find((p) => fs.existsSync(p))
-if (!source) {
-  console.warn('rpcc: no local binary found; set RPCC_BIN or build with `cargo build -p rpcc-core`')
+if (source) {
+  fs.copyFileSync(source, dest)
+  if (process.platform !== 'win32') {
+    fs.chmodSync(dest, 0o755)
+  }
+  console.log(`rpcc: installed ${dest}`)
   process.exit(0)
 }
 
-fs.copyFileSync(source, dest)
-if (process.platform !== 'win32') {
-  fs.chmodSync(dest, 0o755)
+const base = process.env.RPCC_RELEASE_BASE || `https://github.com/carbotic-ai/rpcc/releases/download/v${version}`
+const url = `${base}/${binName}`
+
+download(url, dest)
+  .then(() => {
+    if (process.platform !== 'win32') {
+      fs.chmodSync(dest, 0o755)
+    }
+    console.log(`rpcc: downloaded ${dest}`)
+  })
+  .catch((err) => {
+    console.warn(`rpcc: failed to download ${url}`)
+    console.warn(err?.message || err)
+    console.warn('rpcc: set RPCC_BIN or build with `cargo build -p rpcc-core`')
+    process.exit(1)
+  })
+
+function download(url, destPath) {
+  return new Promise((resolve, reject) => {
+    const request = https.get(
+      url,
+      { headers: { 'User-Agent': 'rpcc-postinstall' } },
+      (res) => {
+        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          res.resume()
+          download(res.headers.location, destPath).then(resolve).catch(reject)
+          return
+        }
+        if (res.statusCode !== 200) {
+          res.resume()
+          reject(new Error(`unexpected status ${res.statusCode}`))
+          return
+        }
+        const tmp = `${destPath}.tmp`
+        const out = fs.createWriteStream(tmp)
+        res.pipe(out)
+        out.on('finish', () => {
+          out.close(() => {
+            fs.renameSync(tmp, destPath)
+            resolve()
+          })
+        })
+        out.on('error', (err) => {
+          out.close(() => reject(err))
+        })
+      }
+    )
+    request.on('error', reject)
+  })
 }
-console.log(`rpcc: installed ${dest}`)
