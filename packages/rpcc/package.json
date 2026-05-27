@@ -1,6 +1,6 @@
 {
-  "name": "@carbotic-ai/rpcc",
-  "version": "0.1.3",
+  "name": "@carbotic/rpcc",
+  "version": "0.1.4",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -22,7 +22,8 @@
     "sql"
   ],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
   },
   "engines": {
     "node": ">=22"
