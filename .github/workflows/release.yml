@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   build:
@@ -49,3 +50,24 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/${{ matrix.bin }}
+
+  npm-publish:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@carbotic-ai'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build TypeScript
+        run: npm run build
+        working-directory: packages/rpcc
+      - name: Publish to GitHub Packages
+        run: npm publish
+        working-directory: packages/rpcc
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
