@@ -6,7 +6,8 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js",
-    "./vitest": "./dist/vitest/index.js"
+    "./vitest": "./dist/vitest/index.js",
+    "./coverage": "./dist/vitest/coverage-provider.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
