@@ -18,7 +18,12 @@ interface RpccCoverageJson {
 function readCoverageJson(cwd: string): RpccCoverageJson | null {
   const coveragePath = resolve(cwd, '.rpcc', 'coverage.json')
   if (!existsSync(coveragePath)) return null
-  return JSON.parse(readFileSync(coveragePath, 'utf8')) as RpccCoverageJson
+  try {
+    return JSON.parse(readFileSync(coveragePath, 'utf8')) as RpccCoverageJson
+  } catch (err) {
+    console.warn(`[rpcc] Failed to parse coverage.json: ${err}`)
+    return null
+  }
 }
 
 function buildCoverageResult(totals: RpccCoverageTotals) {
@@ -90,7 +95,7 @@ const RpccCoverageProvider = {
   generateCoverage(_reportContext: unknown): unknown {
     const json = readCoverageJson(process.cwd())
     if (!json) {
-      console.warn('[rpcc] coverage.json not found — was globalSetup run?')
+      console.warn('[rpcc] coverage.json not found or invalid — was globalSetup run?')
       return { total: null }
     }
     return buildCoverageResult(json.totals)
