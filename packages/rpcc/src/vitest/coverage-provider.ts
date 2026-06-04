@@ -1,32 +1,95 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-interface RpccCoverageTotals {
-  functions: number
-  branches: number
-  covered_branches: number
-  branch_percent: number
-  lines: number
-  covered_lines: number
-  line_percent: number
+interface OidEntry {
+  oid: number
+  schema: string
+  name: string
+  args: string
 }
 
-interface RpccCoverageJson {
-  totals: RpccCoverageTotals
+interface BranchEntry {
+  kind: string
+  line?: number
 }
 
-function readCoverageJson(cwd: string): RpccCoverageJson | null {
-  const coveragePath = resolve(cwd, '.rpcc', 'coverage.json')
-  if (!existsSync(coveragePath)) return null
-  try {
-    return JSON.parse(readFileSync(coveragePath, 'utf8')) as RpccCoverageJson
-  } catch (err) {
-    console.warn(`[rpcc] Failed to parse coverage.json: ${err}`)
-    return null
+interface BranchMap {
+  [oid: string]: { branches: { [branchId: string]: BranchEntry } }
+}
+
+function computeCoverageSummary(cwd: string) {
+  const rpccDir = resolve(cwd, '.rpcc')
+  const oidPath = resolve(rpccDir, 'oid_map.json')
+  const branchPath = resolve(rpccDir, 'branch_map.json')
+  if (!existsSync(oidPath) || !existsSync(branchPath)) return null
+
+  const oidMap: OidEntry[] = JSON.parse(readFileSync(oidPath, 'utf8'))
+  const branchMap: BranchMap = JSON.parse(readFileSync(branchPath, 'utf8'))
+
+  const hits = new Set<string>()
+  if (existsSync(rpccDir)) {
+    const files = readdirSync(rpccDir).filter((f) => f.startsWith('hits-') && f.endsWith('.json'))
+    for (const file of files) {
+      const data = JSON.parse(readFileSync(resolve(rpccDir, file), 'utf8'))
+      for (const hit of data.hits || []) {
+        hits.add(hit as string)
+      }
+    }
+  }
+
+  let totalBranches = 0
+  let coveredBranches = 0
+  let totalLines = 0
+  let coveredLines = 0
+  let functionCount = 0
+
+  for (const entry of oidMap) {
+    const branches = branchMap[String(entry.oid)]?.branches || {}
+    const branchIds = Object.keys(branches)
+    let branchTotal = 0
+    let branchCovered = 0
+    const lineHits = new Map<string, boolean>()
+
+    for (const branchId of branchIds) {
+      const branch = branches[branchId]
+      if (!branch) continue
+      const hit = hits.has(`${entry.oid}|${branchId}`)
+      if (branch.kind !== 'stmt') {
+        branchTotal += 1
+        if (hit) branchCovered += 1
+      }
+      const lineKey = String(branch.line || 0)
+      if (!lineHits.has(lineKey)) {
+        lineHits.set(lineKey, hit)
+      } else if (hit) {
+        lineHits.set(lineKey, true)
+      }
+    }
+
+    let functionCoveredLines = 0
+    for (const value of lineHits.values()) {
+      if (value) functionCoveredLines += 1
+    }
+
+    totalBranches += branchTotal
+    coveredBranches += branchCovered
+    totalLines += lineHits.size
+    coveredLines += functionCoveredLines
+    functionCount += 1
+  }
+
+  return {
+    functions: functionCount,
+    branches: totalBranches,
+    covered_branches: coveredBranches,
+    branch_percent: totalBranches ? Math.round((coveredBranches / totalBranches) * 10000) / 100 : 0,
+    lines: totalLines,
+    covered_lines: coveredLines,
+    line_percent: totalLines ? Math.round((coveredLines / totalLines) * 10000) / 100 : 0,
   }
 }
 
-function buildCoverageResult(totals: RpccCoverageTotals) {
+function buildCoverageResult(totals: ReturnType<typeof computeCoverageSummary> & object) {
   return {
     total: {
       lines: {
@@ -80,7 +143,7 @@ const RpccCoverageProvider = {
       reportOnFailure: false,
       thresholds: {},
       ignoreEmptyLines: false,
-      customProviderModule: '@carbotic-ai/rpcc/coverage',
+      customProviderModule: '@carbotic/rpcc/coverage',
     }
   },
 
@@ -93,12 +156,12 @@ const RpccCoverageProvider = {
   },
 
   generateCoverage(_reportContext: unknown): unknown {
-    const json = readCoverageJson(process.cwd())
-    if (!json) {
-      console.warn('[rpcc] coverage.json not found or invalid — was globalSetup run?')
+    const totals = computeCoverageSummary(process.cwd())
+    if (!totals) {
+      console.warn('[rpcc] oid_map.json or branch_map.json not found — was globalSetup run?')
       return { total: null }
     }
-    return buildCoverageResult(json.totals)
+    return buildCoverageResult(totals)
   },
 
   reportCoverage(coverage: unknown, _reportContext: unknown): void {
@@ -116,3 +179,5 @@ const RpccCoverageProvider = {
 export function getProvider() {
   return RpccCoverageProvider
 }
+
+export default { getProvider }
