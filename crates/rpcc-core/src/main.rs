@@ -1076,9 +1076,9 @@ fn find_statement_lines(
         };
         let (line, col) = line_col_from_offset(body, insert_pos);
         let injection = if indent_is_ws {
-            format!("{indent_slice}PERFORM rpcc.track_line({oid}, {current_id});\n")
+            format!("{indent_slice}{}\n", track_call("rpcc.track_line", oid, current_id))
         } else {
-            format!("PERFORM rpcc.track_line({oid}, {current_id}); ")
+            format!("{} ", track_call("rpcc.track_line", oid, current_id))
         };
 
         ops.push(Op {
@@ -1383,6 +1383,18 @@ fn find_then_token(tokens: &[Token], body: &str, mask: &[bool], start_idx: usize
     None
 }
 
+/// Build a coverage-tracking call that preserves PL/pgSQL `FOUND` and `ROW_COUNT`.
+///
+/// A bare `PERFORM rpcc.track_*(...)` sets both `FOUND` and the `GET DIAGNOSTICS
+/// ROW_COUNT` value, which corrupts any following `IF NOT FOUND` / `GET DIAGNOSTICS`
+/// in the instrumented function — changing its behavior and making those branches
+/// unreachable under coverage. An *assignment* statement does not touch `FOUND` or
+/// `ROW_COUNT`, so we call the tracker via an assignment inside a self-contained
+/// nested block (its own DECLARE means no variable has to be added to the function).
+fn track_call(func: &str, oid: u32, branch_id: u32) -> String {
+    format!("DECLARE rpcc_hit boolean; BEGIN rpcc_hit := {func}({oid}, {branch_id}); END;")
+}
+
 fn inject_plpgsql_branch(ctx: BranchInject<'_>) {
     let (insert_line_start, insert_line_end) = line_bounds(ctx.body, ctx.insert_pos);
     let insert_line = &ctx.body[insert_line_start..insert_line_end];
@@ -1391,8 +1403,8 @@ fn inject_plpgsql_branch(ctx: BranchInject<'_>) {
         .take_while(|c| c.is_whitespace())
         .collect();
     let injection = format!(
-        "{indent}  PERFORM rpcc.track({}, {});\n",
-        ctx.oid, ctx.branch_id
+        "{indent}  {}\n",
+        track_call("rpcc.track", ctx.oid, ctx.branch_id)
     );
 
     ctx.ops.push(Op {
@@ -1502,7 +1514,7 @@ fn find_plpgsql_case_branches(
                 .collect();
             let insert_at = line_end;
 
-            let injection = format!("{indent}  PERFORM rpcc.track({oid}, {current_id});\n");
+            let injection = format!("{indent}  {}\n", track_call("rpcc.track", oid, current_id));
 
             ops.push(Op {
                 kind: OpKind::Insert,
@@ -1953,4 +1965,65 @@ fn line_col_from_offset(body: &str, offset: usize) -> (usize, usize) {
         }
     }
     (line, col)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn track_call_uses_assignment_not_perform() {
+        // A bare PERFORM would set FOUND/ROW_COUNT and corrupt the instrumented
+        // function's control flow (e.g. break IF NOT FOUND). The tracker must be
+        // invoked via an assignment, which leaves FOUND/ROW_COUNT untouched.
+        let call = track_call("rpcc.track_line", 42, 7);
+        assert!(
+            !call.contains("PERFORM"),
+            "track call must not use PERFORM (it clobbers FOUND/ROW_COUNT): {call}"
+        );
+        assert!(
+            call.contains(":= rpcc.track_line(42, 7)"),
+            "track call must invoke the tracker via assignment: {call}"
+        );
+        // Self-contained nested block so no DECLARE is needed in the target function.
+        assert!(call.contains("DECLARE") && call.contains("BEGIN") && call.contains("END;"));
+    }
+
+    #[test]
+    fn instrumented_if_not_found_is_preceded_by_assignment_form() {
+        // End-to-end at the string level: instrumenting a function whose body has a
+        // SELECT INTO followed by IF NOT FOUND must inject the assignment form (not a
+        // PERFORM) on the line before IF NOT FOUND.
+        let func = DbFunction {
+            oid: 1,
+            schema: "public".to_string(),
+            name: "f".to_string(),
+            args: String::new(),
+            xmin: "1".to_string(),
+            definition: concat!(
+                "CREATE FUNCTION public.f() RETURNS void LANGUAGE plpgsql AS $$\n",
+                "DECLARE r record;\n",
+                "BEGIN\n",
+                "  SELECT 1 INTO r WHERE false;\n",
+                "  IF NOT FOUND THEN\n",
+                "    RAISE EXCEPTION 'missing';\n",
+                "  END IF;\n",
+                "END;\n",
+                "$$;"
+            )
+            .to_string(),
+        };
+        let (instrumented, _entry, _ops) = instrument_function(&func).unwrap();
+        assert!(
+            !instrumented.contains("PERFORM rpcc."),
+            "no bare PERFORM tracker calls should be emitted:\n{instrumented}"
+        );
+        // The line immediately before `IF NOT FOUND` must be the assignment form.
+        let idx = instrumented.find("IF NOT FOUND").expect("IF NOT FOUND present");
+        let before = &instrumented[..idx];
+        assert!(
+            before.trim_end().ends_with("END;"),
+            "IF NOT FOUND must be preceded by the nested-block assignment tracker:\n{instrumented}"
+        );
+    }
 }
