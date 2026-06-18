@@ -10,12 +10,15 @@ const OID_MAP = JSON.stringify([
   { oid: 100, schema: 'public', name: 'my_func', args: '' },
 ])
 
+// Field is "type" to match what the Rust instrumenter actually serializes
+// (BranchLocation, #[serde(rename = "type")]). Using "kind" here previously
+// masked the provider reading the wrong field.
 const BRANCH_MAP = JSON.stringify({
   '100': {
     branches: {
-      '1': { kind: 'branch', line: 1 },
-      '2': { kind: 'branch', line: 2 },
-      '3': { kind: 'stmt', line: 3 },
+      '1': { type: 'branch', line: 1 },
+      '2': { type: 'branch', line: 2 },
+      '3': { type: 'stmt', line: 3 },
     },
   },
 })
@@ -67,6 +70,16 @@ describe('RpccCoverageProvider', () => {
       expect(result.total.lines.covered).toBe(1)
       expect(result.total.functions).toEqual({ pct: 100, covered: 1, total: 1 })
       expect(result.total.statements.pct).toBe(result.total.lines.pct)
+    })
+
+    it('excludes stmt entries from the branch denominator', () => {
+      // Regression guard: the provider must key off the "type" field the Rust
+      // instrumenter emits. Reading the wrong field made every stmt entry count
+      // as a branch (denominator 3 instead of 2 here).
+      setupFs()
+      const result = provider.generateCoverage(null) as any
+      expect(result.total.branches.total).toBe(2)
+      expect(result.total.branches.total).not.toBe(3)
     })
 
     it('returns { total: null } when oid_map.json does not exist', () => {

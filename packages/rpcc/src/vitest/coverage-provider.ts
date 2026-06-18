@@ -9,7 +9,10 @@ interface OidEntry {
 }
 
 interface BranchEntry {
-  kind: string
+  // The Rust instrumenter serializes this field as "type" (see BranchLocation
+  // in crates/rpcc-core/src/main.rs, #[serde(rename = "type")]). Reading "kind"
+  // here silently yielded undefined, so every stmt entry was counted as a branch.
+  type: string
   line?: number
 }
 
@@ -54,7 +57,7 @@ function computeCoverageSummary(cwd: string) {
       const branch = branches[branchId]
       if (!branch) continue
       const hit = hits.has(`${entry.oid}|${branchId}`)
-      if (branch.kind !== 'stmt') {
+      if (branch.type !== 'stmt') {
         branchTotal += 1
         if (hit) branchCovered += 1
       }
