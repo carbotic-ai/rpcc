@@ -122,14 +122,32 @@ function buildCoverageResult(totals: ReturnType<typeof computeCoverageSummary> &
   }
 }
 
+const DEFAULT_THRESHOLDS = { lines: 95, branches: 88 }
+
+interface CoverageThresholds {
+  lines?: number
+  branches?: number
+}
+
+interface IncomingCoverageOptions {
+  thresholds?: CoverageThresholds
+  [key: string]: unknown
+}
+
 const RpccCoverageProvider = {
   name: 'rpcc' as const,
+
+  _thresholds: { ...DEFAULT_THRESHOLDS } as CoverageThresholds,
 
   initialize(_ctx: unknown): void {
     // rpcc instrumentation is handled by globalSetup — nothing to do here
   },
 
-  resolveOptions() {
+  resolveOptions(options: IncomingCoverageOptions) {
+    this._thresholds = {
+      lines: options?.thresholds?.lines ?? DEFAULT_THRESHOLDS.lines,
+      branches: options?.thresholds?.branches ?? DEFAULT_THRESHOLDS.branches,
+    }
     return {
       provider: 'custom' as const,
       enabled: true,
@@ -144,7 +162,7 @@ const RpccCoverageProvider = {
       processingConcurrency: 1,
       reporter: [['text', {}]] as [string, Record<string, unknown>][],
       reportOnFailure: false,
-      thresholds: {},
+      thresholds: this._thresholds,
       ignoreEmptyLines: false,
       customProviderModule: '@carbotic/rpcc/coverage',
     }
@@ -175,6 +193,12 @@ const RpccCoverageProvider = {
       `[rpcc] coverage: ${lines.covered}/${lines.total} lines (${lines.pct}%), ` +
         `${branches.covered}/${branches.total} branches (${branches.pct}%)`
     )
+    const failures: string[] = []
+    if (this._thresholds.lines !== undefined && lines.pct < this._thresholds.lines)
+      failures.push(`lines ${lines.pct}% below threshold ${this._thresholds.lines}%`)
+    if (this._thresholds.branches !== undefined && branches.pct < this._thresholds.branches)
+      failures.push(`branches ${branches.pct}% below threshold ${this._thresholds.branches}%`)
+    if (failures.length > 0) throw new Error(`[rpcc] coverage thresholds not met: ${failures.join(', ')}`)
   },
 }
 

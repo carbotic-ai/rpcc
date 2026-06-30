@@ -103,6 +103,23 @@ describe('RpccCoverageProvider', () => {
     })
   })
 
+  describe('resolveOptions', () => {
+    it('uses default thresholds when none provided', () => {
+      const opts = provider.resolveOptions({} as any)
+      expect(opts.thresholds).toEqual({ lines: 95, branches: 88 })
+    })
+
+    it('uses caller thresholds when provided', () => {
+      const opts = provider.resolveOptions({ thresholds: { lines: 80, branches: 70 } } as any)
+      expect(opts.thresholds).toEqual({ lines: 80, branches: 70 })
+    })
+
+    it('merges partial thresholds against defaults', () => {
+      const opts = provider.resolveOptions({ thresholds: { lines: 60 } } as any)
+      expect(opts.thresholds).toEqual({ lines: 60, branches: 88 })
+    })
+  })
+
   describe('reportCoverage', () => {
     it('logs coverage summary to stdout', () => {
       vi.mocked(fs.existsSync).mockReturnValue(true)
@@ -114,6 +131,7 @@ describe('RpccCoverageProvider', () => {
         return ''
       })
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      provider.resolveOptions({ thresholds: { lines: 0, branches: 0 } } as any)
       const coverage = provider.generateCoverage(null)
       provider.reportCoverage(coverage, null)
       expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('lines'))
@@ -121,7 +139,57 @@ describe('RpccCoverageProvider', () => {
     })
 
     it('does not throw when coverage has no total', () => {
+      provider.resolveOptions({} as any)
       expect(() => provider.reportCoverage({ total: null }, null)).not.toThrow()
+    })
+
+    it('throws when lines coverage is below threshold', () => {
+      // BRANCH_MAP: 3 lines, 1 covered (33%) — well below default 95%
+      vi.mocked(fs.existsSync).mockReturnValue(true)
+      vi.mocked(fs.readdirSync).mockReturnValue(['hits-1.json'] as any)
+      vi.mocked(fs.readFileSync).mockImplementation((p: any) => {
+        if (String(p).endsWith('oid_map.json')) return OID_MAP
+        if (String(p).endsWith('branch_map.json')) return BRANCH_MAP
+        if (String(p).endsWith('hits-1.json')) return HITS_FILE
+        return ''
+      })
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+      provider.resolveOptions({} as any)
+      const coverage = provider.generateCoverage(null)
+      expect(() => provider.reportCoverage(coverage, null)).toThrow(/lines.*below threshold/i)
+    })
+
+    it('throws when branches coverage is below threshold', () => {
+      // 1/2 branches = 50%, below default 88%
+      vi.mocked(fs.existsSync).mockReturnValue(true)
+      vi.mocked(fs.readdirSync).mockReturnValue(['hits-1.json'] as any)
+      vi.mocked(fs.readFileSync).mockImplementation((p: any) => {
+        if (String(p).endsWith('oid_map.json')) return OID_MAP
+        if (String(p).endsWith('branch_map.json')) return BRANCH_MAP
+        if (String(p).endsWith('hits-1.json')) return HITS_FILE
+        return ''
+      })
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+      // Set lines threshold low enough to pass (33%), branches stays at default 88%
+      provider.resolveOptions({ thresholds: { lines: 0, branches: 88 } } as any)
+      const coverage = provider.generateCoverage(null)
+      expect(() => provider.reportCoverage(coverage, null)).toThrow(/branches.*below threshold/i)
+    })
+
+    it('does not throw when coverage meets thresholds', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true)
+      vi.mocked(fs.readdirSync).mockReturnValue(['hits-1.json'] as any)
+      vi.mocked(fs.readFileSync).mockImplementation((p: any) => {
+        if (String(p).endsWith('oid_map.json')) return OID_MAP
+        if (String(p).endsWith('branch_map.json')) return BRANCH_MAP
+        if (String(p).endsWith('hits-1.json')) return HITS_FILE
+        return ''
+      })
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+      // Set thresholds below actual coverage (33% lines, 50% branches)
+      provider.resolveOptions({ thresholds: { lines: 30, branches: 40 } } as any)
+      const coverage = provider.generateCoverage(null)
+      expect(() => provider.reportCoverage(coverage, null)).not.toThrow()
     })
   })
 })
